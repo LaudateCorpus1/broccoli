@@ -3,9 +3,6 @@ import rimraf from 'rimraf';
 import undefinedToNull from '../utils/undefined-to-null';
 import NodeWrapper from './node';
 import { TransformNodeInfo, CallbackObject } from 'broccoli-node-api';
-import HeimdallLogger from 'heimdalljs-logger';
-
-const logger = new HeimdallLogger('broccoli:transform-node');
 
 export default class TransformNodeWrapper extends NodeWrapper {
   inputRevisions!: WeakMap<any, { revision: number; changed: boolean }>;
@@ -57,8 +54,6 @@ export default class TransformNodeWrapper extends NodeWrapper {
     }
 
     if (nodesThatChanged.length > 0) {
-      logger.debug(`${this.id} built because inputNodes [${nodesThatChanged.join(', ')}] changed`);
-
       return true;
     }
 
@@ -98,10 +93,6 @@ export default class TransformNodeWrapper extends NodeWrapper {
 
     for (let i = 0; i < this.inputNodeWrappers.length; i++) {
       this.buildState.totalTime += this.inputNodeWrappers[i].buildState.totalTime || 0;
-    }
-
-    if (this.buildState.selfTime >= 100) {
-      logger.debug(`Node build execution time: %ds %dms`, endTime[0], Math.round(endTime[1] / 1e6));
     }
   }
 

@@ -3,10 +3,7 @@ import { EventEmitter } from 'events';
 import SourceNode from './wrappers/source-node';
 import SourceNodeWrapper from './wrappers/source-node';
 import bindFileEvent from './utils/bind-file-event';
-import HeimdallLogger from 'heimdalljs-logger';
 import { isAbsolute, relative } from 'path';
-
-const logger = new HeimdallLogger('broccoli:watcherAdapter');
 
 class WatcherAdapter extends EventEmitter {
   watchers: sane.Watcher[];
@@ -55,10 +52,8 @@ class WatcherAdapter extends EventEmitter {
         watcher.removeAllListeners('ready');
         watcher.removeAllListeners('error');
         watcher.on('error', (err: Error) => {
-          logger.debug('error', err);
           this.emit('error', err);
         });
-        logger.debug('ready', watchedPath);
       });
     });
     // eslint-disable-next-line @typescript-eslint/no-empty-function

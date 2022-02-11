@@ -12,82 +12,12 @@ import filterMap from './utils/filter-map';
 import { EventEmitter } from 'events';
 import { TransformNode, SourceNode, Node } from 'broccoli-node-api';
 import NodeWrapper from './wrappers/node';
-import heimdall from 'heimdalljs';
 import underscoreString from 'underscore.string';
 // @ts-ignore
 import broccoliNodeInfo from 'broccoli-node-info';
-import HeimdallLogger from 'heimdalljs-logger';
-
-const logger = new HeimdallLogger('broccoli:builder');
 
 // Clean up left-over temporary directories on uncaught exception.
 tmp.setGracefulCleanup();
-
-function reParentNodes(outputNodeWrapper: any) {
-  // re-parent heimdall nodes according to input nodes
-  const seen = new Set();
-  const queue = [outputNodeWrapper];
-  let node;
-  let parent;
-  const stack: any = [];
-  while ((node = queue.pop()) !== undefined) {
-    if (parent === node) {
-      parent = stack.pop();
-    } else {
-      queue.push(node);
-
-      let heimdallNode = node.__heimdall__;
-      if (heimdallNode === undefined || seen.has(heimdallNode)) {
-        // make 0 time node
-        const cookie = heimdall.start(Object.assign({}, heimdallNode.id));
-        heimdallNode = heimdall.current;
-        heimdallNode.id.broccoliCachedNode = true;
-        cookie.stop();
-        heimdallNode.stats.time.self = 0;
-      } else {
-        seen.add(heimdallNode);
-        // Only push children for non "cached inputs"
-        const inputNodeWrappers = node.inputNodeWrappers;
-        for (let i = inputNodeWrappers.length - 1; i >= 0; i--) {
-          queue.push(inputNodeWrappers[i]);
-        }
-      }
-
-      if (parent) {
-        heimdallNode.remove();
-        parent.__heimdall__.addChild(heimdallNode);
-        stack.push(parent);
-      }
-      parent = node;
-    }
-  }
-}
-
-function aggregateTime() {
-  const queue = [heimdall.current];
-  const stack: any = [];
-  let parent;
-  let node;
-  while ((node = queue.pop()) !== undefined) {
-    if (parent === node) {
-      parent = stack.pop();
-      if (parent !== undefined) {
-        parent.stats.time.total += node.stats.time.total;
-      }
-    } else {
-      const children = node._children;
-      queue.push(node);
-      for (let i = children.length - 1; i >= 0; i--) {
-        queue.push(children[i]);
-      }
-      if (parent) {
-        stack.push(parent);
-      }
-      node.stats.time.total = node.stats.time.self;
-      parent = node;
-    }
-  }
-}
 
 interface BuilderOptions {
   tmpdir?: string | null;
@@ -170,7 +100,6 @@ class Builder extends EventEmitter {
     this.checkInputPathsExist();
 
     this.setupTmpDirs();
-    this.setupHeimdall();
     this._cancelationRequest = undefined;
 
     // Now that temporary directories are set up, we need to run the rest of the
@@ -236,13 +165,11 @@ class Builder extends EventEmitter {
 
     try {
       await pipeline;
-      this.buildHeimdallTree(this.outputNodeWrapper);
     } finally {
       const buildsSkipped = filterMap(
         this._nodeWrappers.values(),
         (nw: NodeWrappers) => nw.buildState.built === false
       ).length;
-      logger.debug(`Total nodes skipped: ${buildsSkipped} out of ${this._nodeWrappers.size}`);
 
       this._cancelationRequest = null;
     }
@@ -458,48 +385,6 @@ class Builder extends EventEmitter {
         throw new NodeSetupError(err, nw);
       }
     }
-  }
-
-  setupHeimdall() {
-    this.on('beginNode', node => {
-      let name;
-
-      if (node instanceof SourceNodeWrapper) {
-        name = node.nodeInfo.sourceDirectory;
-      } else {
-        name = node.nodeInfo.annotation || node.nodeInfo.name;
-      }
-
-      node['__heimdall_cookie__'] = heimdall.start({
-        name,
-        label: node.label,
-        broccoliNode: true,
-        broccoliId: node.id,
-        // we should do this instead of reParentNodes
-        // broccoliInputIds: node.inputNodeWrappers.map(input => input.id),
-        broccoliCachedNode: false,
-        broccoliPluginName: node.nodeInfo.name,
-      });
-      node.__heimdall__ = heimdall.current;
-    });
-
-    this.on('endNode', node => {
-      if (node.__heimdall__) {
-        node.__heimdall_cookie__.stop();
-      }
-    });
-  }
-
-  buildHeimdallTree(outputNodeWrapper: any) {
-    if (!outputNodeWrapper.__heimdall__) {
-      return;
-    }
-
-    // Why?
-    reParentNodes(outputNodeWrapper);
-
-    // What uses this??
-    aggregateTime();
   }
 
   get features() {

@@ -3,9 +3,6 @@ import sane from 'sane';
 import { EventEmitter } from 'events';
 import WatcherAdapter from './watcher_adapter';
 import SourceNodeWrapper from './wrappers/source-node';
-import HeimdallLogger from 'heimdalljs-logger';
-
-const logger = new HeimdallLogger('broccoli:watcher');
 
 interface WatcherOptions {
   debounce?: number;
@@ -101,7 +98,6 @@ class Watcher extends EventEmitter {
       (async () => {
         try {
           await this.watcherAdapter.watch();
-          logger.debug('ready');
           this._ready = true;
         } catch (e) {
           this._error(e);
@@ -117,14 +113,11 @@ class Watcher extends EventEmitter {
   async _change(event: 'change', filePath: string, root: string) {
     this._changedFiles.push(path.join(root, filePath));
     if (!this._ready) {
-      logger.debug('change', 'ignored: before ready');
       return;
     }
     if (this._rebuildScheduled) {
-      logger.debug('change', 'ignored: rebuild scheduled already');
       return;
     }
-    logger.debug('change', event, filePath, root);
     this.emit('change', event, filePath, root);
 
     this._rebuildScheduled = true;
@@ -144,7 +137,6 @@ class Watcher extends EventEmitter {
 
     this._updateCurrentBuild(
       new Promise((resolve, reject) => {
-        logger.debug('debounce');
         this.emit('debounce');
         setTimeout(() => {
           // Only set _rebuildScheduled to false *after* the setTimeout so that
@@ -161,7 +153,6 @@ class Watcher extends EventEmitter {
   }
 
   _build(filePath?: string): Promise<void> {
-    logger.debug('buildStart');
     this.emit('buildStart');
 
     const start = process.hrtime();
@@ -180,10 +171,6 @@ class Watcher extends EventEmitter {
     // triggered, because we registered our callback first.
     buildPromise.then(
       (results: { filePath?: string } = {}) => {
-        const end = process.hrtime(start);
-        logger.debug('Build execution time: %ds %dms', end[0], Math.round(end[1] / 1e6));
-        logger.debug('buildSuccess');
-
         // This property is added to keep compatibility for ember-cli
         // as it relied on broccoli-sane-watcher to add it:
         // https://github.com/ember-cli/broccoli-sane-watcher/blob/48860/index.js#L92-L95
@@ -195,7 +182,6 @@ class Watcher extends EventEmitter {
       },
       (err: Error) => {
         this._changedFiles = [];
-        logger.debug('buildFailure');
         this.emit('buildFailure', err);
       }
     );
@@ -204,11 +190,9 @@ class Watcher extends EventEmitter {
 
   async _error(err: any) {
     if (this._quittingPromise) {
-      logger.debug('error', 'ignored: already quitting');
       return this._quittingPromise;
     }
 
-    logger.debug('error', err);
     this.emit('error', err);
 
     try {
@@ -224,7 +208,6 @@ class Watcher extends EventEmitter {
 
   quit(): Promise<void> {
     if (this._quittingPromise) {
-      logger.debug('quit', 'ignored: already quitting');
       return this._quittingPromise;
     }
 
@@ -239,7 +222,6 @@ class Watcher extends EventEmitter {
   }
 
   _quit() {
-    logger.debug('quitStart');
     this.emit('quitStart');
 
     this._quittingPromise = (async () => {
@@ -251,7 +233,6 @@ class Watcher extends EventEmitter {
         } catch (e) {
           // Wait for current build, and ignore build failure
         }
-        logger.debug('quitEnd');
         this.emit('quitEnd');
       }
     })();
